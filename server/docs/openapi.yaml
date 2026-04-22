@@ -1,0 +1,439 @@
+openapi: 3.0.3
+info:
+  title: Garage B2B API
+  description: |
+    **Auth + users (Day 1).** JWT in header `Authorization: Bearer <token>`.
+
+    ### Roles (high level)
+    - **admin** — full admin APIs (users list, approve garage, create distributor).
+    - **distributor** — distributor-only routes (orders/stock later).
+    - **garage** — main B2B account; new garages are **pending** until admin approves.
+    - **user** — optional end-user; self-register is **approved** by default.
+
+    ### Frontend flows
+    - **Garage pending:** login returns `403` + code `ACCOUNT_PENDING` → show waiting/approval screen.
+    - **Invalid login:** `401` + `INVALID_CREDENTIALS`.
+    - **Missing/invalid token:** `401` + `UNAUTHORIZED`.
+    - **Wrong role / RBAC:** `403` + `FORBIDDEN`.
+    - **Not found:** `404` + `NOT_FOUND`.
+
+    ### Response envelope
+    - Success: `{ "success": true, "data": ... }`
+    - Error: `{ "success": false, "message": "...", "code": "SOME_CODE" }`
+
+    ### User object (API contract, not Mongo internals)
+    `id`, `name`, `phone`, `role`, `status`, `createdBy` (nullable), `createdAt`, `updatedAt`
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8000/api
+    description: Local API (default PORT=8000)
+
+tags:
+  - name: Health
+  - name: Auth
+  - name: Admin
+  - name: Distributor
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 6620a1b2c3d4e5f6a7b8c9d0
+        name:
+          type: string
+        phone:
+          type: string
+        role:
+          type: string
+          enum: [admin, distributor, garage, user]
+        status:
+          type: string
+          enum: [pending, approved]
+        createdBy:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ApiSuccess:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          description: Endpoint-specific payload
+
+    ApiError:
+      type: object
+      required: [success, message, code]
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+        code:
+          type: string
+          description: Machine-readable code for the UI
+          example: ACCOUNT_PENDING
+
+    RegisterRequest:
+      type: object
+      required: [name, phone, password]
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+        password:
+          type: string
+          minLength: 6
+        role:
+          type: string
+          enum: [garage, user]
+          default: garage
+          description: Self-signup only for `garage` or `user`.
+
+    LoginRequest:
+      type: object
+      required: [phone, password]
+      properties:
+        phone:
+          type: string
+        password:
+          type: string
+
+    ApproveUserResponse:
+      allOf:
+        - $ref: "#/components/schemas/ApiSuccess"
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                message:
+                  type: string
+                user:
+                  $ref: "#/components/schemas/User"
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Liveness check
+      description: Same payload as `GET /health` at server root if enabled; primary contract is under `/api`.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      ok:
+                        type: boolean
+                      service:
+                        type: string
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register (garage or user only)
+      description: |
+        - **garage** → `status: pending` (no JWT until approved + login).
+        - **user** → `status: approved` and returns **token** for immediate use.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      user:
+                        $ref: "#/components/schemas/User"
+                      token:
+                        type: string
+                        nullable: true
+        "400":
+          description: Validation / disallowed role
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: Phone already registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login
+      description: |
+        Pending garages cannot log in (`403` + `ACCOUNT_PENDING`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      token:
+                        type: string
+                      user:
+                        $ref: "#/components/schemas/User"
+        "400":
+          description: Missing fields
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "401":
+          description: Wrong phone/password
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Account pending approval (`code` = `ACCOUNT_PENDING`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              example:
+                success: false
+                message: Account pending approval. Contact admin.
+                code: ACCOUNT_PENDING
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Current user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      user:
+                        $ref: "#/components/schemas/User"
+        "401":
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Pending account (if token somehow issued)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /admin/users:
+    get:
+      tags: [Admin]
+      summary: List all users
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      users:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/User"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Not an admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /admin/users/{id}/approve:
+    patch:
+      tags: [Admin]
+      summary: Approve a garage user
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Approved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApproveUserResponse"
+        "400":
+          description: Not a garage / invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Not an admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /admin/distributors:
+    post:
+      tags: [Admin]
+      summary: Create distributor (admin only)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, phone, password]
+              properties:
+                name:
+                  type: string
+                phone:
+                  type: string
+                password:
+                  type: string
+                  minLength: 6
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+                      user:
+                        $ref: "#/components/schemas/User"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Not an admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: Phone already registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /distributor/ping:
+    get:
+      tags: [Distributor]
+      summary: Distributor-only sample route
+      description: Example of role-gated access (distributor JWT).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Unauthorized
+        "403":
+          description: Not a distributor
