@@ -25,7 +25,7 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
   },
-  { timestamps: true }
+  { timestamps: true, collection: "b2b_users" }
 );
 
 userSchema.pre("save", async function hashPassword(next) {

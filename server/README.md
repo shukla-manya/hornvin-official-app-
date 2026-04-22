@@ -259,8 +259,17 @@ This is the **API contract** (not the raw Mongo document). Password is never ret
 | `npm start` | Run server |
 | `npm run dev` | Run with `--watch` |
 | `npm test` | Run automated API integration tests |
-| `npm run seed:admin` | Insert super admin if missing (uses `SEED_ADMIN_*` in `.env`) |
-| `npm run list:admins` | Print admin users (`name`, `phone`, `role`, `status`) as JSON |
+| `npm run seed:admin` | Insert super admin if missing (reads `SEED_ADMIN_PHONE`, `SEED_ADMIN_NAME`, `SEED_ADMIN_PASSWORD` from `.env`) |
+| `npm run list:admins` | Print admin users as JSON (fields include name, phone, role, status, createdAt) |
+
+**Copy-paste (run each line alone; do not add inline `#` comments on the same line in zsh — see note below):**
+
+```bash
+npm run seed:admin
+npm run list:admins
+```
+
+**zsh:** If `interactivecomments` is off (default on many setups), text after `#` on the same line is **not** a comment. The shell may try to expand globs like `SEED_ADMIN_*` or parse parentheses in comments, which causes errors such as `no matches found` or `unknown file attribute`. Either run the two commands above exactly, or enable comments with `setopt interactivecomments`.
 
 Put your MongoDB database name in `MONGODB_URI` (see `.env.example`). The example uses **`b2b_users`** for the B2B users data store; MongoDB does not allow a space in the database name, so `b2b users` is represented as `b2b_users` in the connection string.
 
