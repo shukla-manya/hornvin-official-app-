@@ -14,7 +14,8 @@ function uniquePhone(prefix) {
 
 beforeAll(async () => {
   mongoServer = await MongoMemoryServer.create();
-  process.env.MONGODB_URI = mongoServer.getUri("b2b users");
+  // MongoDB does not allow spaces in database names; this is the "b2b users" app database.
+  process.env.MONGODB_URI = mongoServer.getUri("b2b_users");
   app = buildApp();
   await connectDB();
 });

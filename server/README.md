@@ -258,11 +258,27 @@ This is the **API contract** (not the raw Mongo document). Password is never ret
 |---------|-------------|
 | `npm start` | Run server |
 | `npm run dev` | Run with `--watch` |
-| `npm run seed:admin` | Insert super admin if missing |
+| `npm test` | Run automated API integration tests |
+| `npm run seed:admin` | Insert super admin if missing (uses `SEED_ADMIN_*` in `.env`) |
+| `npm run list:admins` | Print admin users (`name`, `phone`, `role`, `status`) as JSON |
+
+Put your MongoDB database name in `MONGODB_URI` (see `.env.example`). The example uses **`b2b_users`** for the B2B users data store; MongoDB does not allow a space in the database name, so `b2b users` is represented as `b2b_users` in the connection string.
 
 ---
 
 ## Testing
+
+### Automated API tests
+
+From `server/`:
+
+```bash
+npm test
+```
+
+Uses **Jest**, **Supertest**, and **MongoDB Memory Server** (no real MongoDB required). Covers health checks, garage pending flow, admin approval, `/me` with and without a token, user self-register, role guards, distributor creation, and distributor ping.
+
+### Manual checks
 
 - Use **Swagger UI** at `/api-docs` for interactive tests.  
 - Or use **Postman** / **Insomnia** with the same URLs and the Bearer token from login.  
