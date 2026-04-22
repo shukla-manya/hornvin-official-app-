@@ -6,13 +6,20 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "seed:admin": "node scripts/seedAdmin.js"
+    "seed:admin": "node scripts/seedAdmin.js",
+    "list:admins": "node scripts/listAdmins.js",
+    "test": "NODE_ENV=test jest --runInBand"
   },
   "engines": {
     "node": ">=18"
   },
   "keywords": ["garage", "b2b", "marketplace", "express", "mongodb"],
   "license": "UNLICENSED",
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "mongodb-memory-server": "^10.1.4",
+    "supertest": "^7.1.0"
+  },
   "dependencies": {
     "bcrypt": "^5.1.1",
     "cors": "^2.8.5",
